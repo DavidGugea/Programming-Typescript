@@ -1542,9 +1542,9 @@ let reserve: Reserve = (
 
 Overloads come up naturally in browser DOM APIs. The createElement DOM API, for example, is used to create a new HTML element. It takes a string corresponding to an HTML tag and returns a new HTML element of that tag’s type. TypeScript comes with built-in types for each HTML element. These include:
 
-* HTMLAnchorElement for <a> elements
-* HTMLCanvasElement for <canvas> elements
-* HTMLTableElement for <table> elements
+* HTMLAnchorElement for ```<a>``` elements
+* HTMLCanvasElement for ```<canvas>``` elements
+* HTMLTableElement for ```<table>``` elements
 
 Overloaded call signatures are a natural way to model how createElement works:
 
@@ -2267,3 +2267,451 @@ should have some intuition for what map does: it takes an array of T and a funct
 When you write a TypeScript program, start by defining your functions’ type signatures—in other words, lead with the types—filling in the implementations later. By sketching out your program out at the type level first, you make sure that everything makes sense at a high level before you get down to your implementations.
 
 You’ll notice that so far, we’ve been doing the opposite: leading with the implementation, then deducing the types. Now that you have a grasp of writing and typing functions in TypeScript, we’re going to switch modes, sketching out the types first, and filling in the details later
+
+# 5. Classes and Interfaces
+
+## Access modifiers
+
+TypeScript supports three access modifiers for properties and methods on a class:
+
+* ```public```
+    * Accessible from anywhere. This is the default access level.
+* ```protected```
+    * Accessible from instances of this class and its subclasses.
+* ```private```
+    * Accessible from instances of this class only.
+
+Using access modifiers, you can design classes that don’t expose too much information about their implementations, and instead expose well-defined APIs for others to use.
+
+You can also make ```abstract``` classes and the principle is the same as in C#:
+
+```TypeScript
+abstract class Piece {/*...*/}
+```
+
+Now if you try to instantiate a ```Piece``` directly, TypeScript complains:
+
+```TypeScript
+new Piece('White', 'E', 1) // Error TS2511: Cannot create an instance
+                           // of an abstract class.
+```
+
+The abstract keyword means that you can’t instantiate the class directly, but it doesn’t mean you can’t define some methods on it:
+
+## Interfaces
+
+When you use classes, you will often find yourself using them with interfaces.
+
+Like type aliases, interfaces are a way to name a type so you don’t have to define it inline. Type aliases and interfaces are mostly two syntaxes for the same thing (like function expressions and function declarations), but there are a few small differences. Let’s start with what they have in common. Consider the following type alias:
+
+```TypeScript
+type Sushi = {
+    calories: number
+    salty: boolean
+    tasty: boolean
+}
+```
+
+It’s easy to rewrite it as an interface:
+
+```TypeScript
+interface Sushi {
+    calories: number
+    salty: boolean
+    tasty: boolean
+}
+```
+
+Everywhere you used your Sushi type alias, you can also use your Sushi interface. Both declarations define shapes, and those shapes are assignable to one another (in fact, they’re identical!).
+
+Things get more interesting when you start combining types. Let’s model another food in addition to Sushi:
+
+```TypeScript
+type Cake = {
+    calories: number
+    sweet: boolean
+    tasty: boolean
+}
+```
+
+A lot of foods have calories and are tasty—not just Sushi and Cake. Let’s pull Food out into its own type, and redefine our foods in terms of it:
+
+```TypeScript
+type Food = {
+    calories: number
+    tasty: boolean
+}
+
+type Sushi = Food & {
+    salty: boolean
+}
+
+type Cake = Food & {
+    sweet: boolean
+}
+```
+
+Nearly equivalently, you can do that with interfaces too:
+
+```TypeScript
+interface Food {
+    calories: number
+    tasty: boolean
+}
+
+interface Sushi extends Food {
+    salty: boolean
+}
+
+interface Cake extends Food {
+    sweet: boolean
+}
+```
+
+Interfaces don’t have to extend other interfaces. In fact, an interface can extend any shape: an object type, a class, or another interface.
+
+***What are the differences between types and interfaces?*** There are three, and they’re subtle.
+
+***The first*** is that type aliases are more general, in that their righthand side can be any type, including a type expression (a type, and maybe some type operators like & or |); for an interface, the righthand side must be a shape. For example, there is no way to rewrite the following type aliases as interfaces:
+
+```TypeScript
+type A = number
+type B = A | string
+```
+
+***The second*** difference is that when you extend an interface, TypeScript will make sure that the interface you’re extending is assignable to your extension. For example:
+
+```TypeScript
+interface A {
+    good(x: number): string
+    bad(x: number): string
+}
+
+interface B extends A {
+    good(x: string | number): string
+    bad(x: string): string // Error TS2430: Interface 'B' incorrectly extends
+} // interface 'A'. Type 'number' is not assignable to type 'string'.
+```
+
+This is not the case when you use intersection types: if you turn the interfaces from the last example into type aliases and the extends into an intersection (&), TypeScript will do its best to combine your extension with the type it’s extending, resulting in an overloaded signature for bad instead of a compile-time error.
+
+When you’re modeling inheritance for object types, the assignability check that TypeScript does for interfaces can be a helpful tool to catch errors.
+
+***The third*** difference is that multiple interfaces with the same name in the same scope are automatically merged; multiple type aliases with the same name in the same scope will throw a compile-time error. This is a feature called declaration merging.
+
+## Declaration Merging
+
+Declaration merging is TypeScript’s way of automatically combining multiple declarations that share the same name.
+
+For example, if you declare two identically named User interfaces, then TypeScript will automatically combine them for you into a single interface:
+
+```TypeScript
+// User has a single field, name
+interface User {
+    name: string
+}
+
+// User now has two fields, name and age
+interface User {
+    age: number
+}
+
+let a: User = {
+    name: 'Ashley',
+    age: 30
+}
+```
+
+Here’s what happens if you repeat that example with type aliases:
+
+```TypeScript
+type User = { // Error TS2300: Duplicate identifier 'User'.
+    name: string
+}
+
+type User = { // Error TS2300: Duplicate identifier 'User'.
+    age: number
+}
+```
+
+Note that the two interfaces can’t conflict; if one types property as a T and the other types it as a U, and T and U aren’t identical, then you’ll get an error:
+
+```TypeScript
+interface User {
+    age: string
+}
+interface User {
+    age: number // Error TS2717: Subsequent property declarations must have
+} // the same type. Property 'age' must be of type 'string',
+// but here has type 'number'.    
+```
+
+And if your interface declares generics (skip ahead to “Polymorphism” to learn more), those generics have to be declared the exact same way for two interfaces to be mergeable—down to the generic’s name!
+
+```TypeScript
+interface User<Age extends number> { // Error TS2428: All declarations of 'User'
+    age: Age // must have identical type parameters.
+}
+
+interface User<Age extends string> {
+    age: Age
+}
+```
+
+***Interestingly, this is a rare place where TypeScript checks that two types are not only assignable, but identical.***
+
+## Implementations
+
+When you declare a class, you can use the implements keyword to say that it satisfies a particular interface. Like other explicit type annotations, this is a convenient way to add a type-level constraint that your class is implemented correctly as closely as possible to the implementation itself, so that the error from an incorrect implementation doesn’t show up downstream where it’s less clear why it was thrown. It’s also a familiar way to implement common design patterns like adapters, factories, and strategies (see the end of this chapter for some examples).
+
+Here’s what that looks like:
+
+```TypeScript
+interface Animal {
+    eat(food: string): void
+    sleep(hours: number): void
+}
+
+class Cat implements Animal {
+    eat(food: string) {
+        console.info('Ate some', food, '. Mmm!')
+    }
+    sleep(hours: number) {
+        console.info('Slept for', hours, 'hours')
+    }
+}
+```
+
+Cat has to implement every method that Animal declares, and can implement more methods and properties on top if it wants.
+
+Interfaces can declare instance properties, but they can’t declare visibility modifiers (private, protected, and public) and they can’t use the static keyword. You can also mark instance properties as readonly, just like we did for object types in Objects:
+
+```TypeScript
+interface Animal {
+    readonly name: string
+    eat(food: string): void
+    sleep(hours: number): void
+}
+```
+
+You’re not limited to implementing just one interface—you can implement as many as you want:
+
+```TypeScript
+interface Animal {
+    readonly name: string
+    eat(food: string): void
+    sleep(hours: number): void
+}
+
+interface Feline {
+    meow(): void
+}
+
+class Cat implements Animal, Feline {
+    name = 'Whiskers'
+
+    eat(food: string) {
+        console.info('Ate some', food, '. Mmm!')
+    }
+
+    sleep(hours: number) {
+        console.info('Slept for', hours, 'hours')
+    }
+
+    meow() {
+        console.info('Meow')
+    }
+}
+```
+
+All of these features are completely typesafe. If you forget to implement a method or a property, or implement it incorrectly, TypeScript will come to the rescue.
+
+## Implementing Interfaces Versus Extending Abstract Classes
+
+Implementing an interface is really similar to extending an abstract class. The difference is that interfaces are more general and lightweight, and abstract classes are more special-purpose and feature-rich.
+
+An interface is a way to model a shape. At the value level, that means an object, array, function, class, or class instance. Interfaces do not emit JavaScript code, and only exist at compile time.
+
+An abstract class can only model, well, a class. It emits runtime code that is, you guessed it, a JavaScript class. Abstract classes can have constructors, provide default implementations, and set access modifiers for properties and methods. Interfaces can’t do any of those things.
+
+Which one you use depends on your use case. When an implementation is shared among multiple classes, use an abstract class. When you need a lightweight way to say “this class is a T,” use an interface.
+
+## Classes are structurally typed
+
+Like every other type in TypeScript, TypeScript compares classes by their structure, not by their name. A class is compatible with any other type that shares its shape, including a regular old object that defines the same properties or methods as the class. It means that if you have a function that takes a Zebra and you give it a Poodle, TypeScript might not mind:
+
+```TypeScript
+class Zebra {
+    trot() {
+    // ...
+    }
+}
+
+class Poodle {
+    trot() {
+    // ...
+    }
+}
+
+function ambleAround(animal: Zebra) {
+    animal.trot()
+}
+
+let zebra = new Zebra
+let poodle = new Poodle
+
+ambleAround(zebra) // OK
+ambleAround(poodle) // OK
+```
+
+The exception to this rule is classes with private or protected fields: when checking whether or not a shape is assignable to a class, if the class has any private or protected fields and the shape is not an instance of that class or a subclass of that class, then the shape is not assignable to the class:
+
+```TypeScript
+class A {
+    private x = 1
+}
+
+class B extends A {}
+
+function f(a: A) {}
+
+f(new A) // OK
+f(new B) // OK
+
+f({x: 1}) // Error TS2345: Argument of type '{x: number}' is not
+// assignable to parameter of type 'A'. Property 'x' is
+// private in type 'A' but not in type '{x: number}'.
+```
+
+## Classes declare both values and types
+
+Most things that you can express in TypeScript are either values or types:
+
+```TypeScript
+// values
+let a = 1999
+function b() {}
+
+// types
+type a = number
+
+interface b {
+    (): void
+}
+```
+
+Types and values are namespaced separately in TypeScript. Depending on how you use a term (a or b in this example), TypeScript knows whether to resolve it to a type or to a value:
+
+```TypeScript
+// ...
+if (a + 1 > 3) //... // TypeScript infers from context that you mean the value
+
+let x: a = 3 // TypeScript infers from context that you mean the type
+```
+
+This contextual term resolution is really nice, and lets us do cool things like implement companion types.
+
+Classes and enums are special. They are unique because they generate both a type in the type namespace and a value in the value namespace:
+
+```TypeScript
+class C {}
+let c: C // 1
+= new C // 2
+
+enum E {F, G}
+let e: E // 3
+= E.F // 4
+```
+
+1. In this context, C refers to the instance type of our C class.
+2. In this context, C refers to C the value.
+3. In this context, E refers to the type of our E enum.
+4. In this context, E refers to E the value.
+
+We also need a way to represent a class at runtime, so that we can instantiate it with new, call static methods on it, do metaprogramming with it, and operate on it with instanceof—so a class needs to generate a value too.
+
+In the previous example C refers to an instance of the class C. How do you talk about the C class itself? We use the typeof keyword (a type operator provided by TypeScript, which is like JavaScript’s value-level typeof but for types).
+
+## Polymorphism
+
+Like functions and types, classes and interfaces have rich support for generic type parameters, including defaults and bounds. You can scope a generic to your whole class or interface, or to a specific method:
+
+```TypeScript
+class MyMap<K, V> { // 1
+    constructor(initialKey: K, initialValue: V) { // 2
+        // ...
+    }
+    get(key: K): V { // 3
+        // ...
+    }
+    set(key: K, value: V): void {
+        // ...
+    }
+    merge<K1, V1>(map: MyMap<K1, V1>): MyMap<K | K1, V | V1> { // 4
+        // ...
+    }
+    static of<K, V>(k: K, v: V): MyMap<K, V> { // 5
+       // ...
+    }
+}
+```
+
+1. Bind class-scoped generic types when you declare your class. Here, K and V are available to every instance method and instance property on MyMap.
+2. Note that you cannot declare generic types in a constructor. Instead, move the declaration up to your class declaration.
+3. Use class-scoped generic types anywhere inside your class.
+4. Instance methods have access to class-level generics, and can also declare their own generics on top. .merge makes use of the K and V class-level generics, and also declares two of its own generics, K1 and V1.
+5. Static methods do not have access to their class’s generics, just like at the value level they don’t have access to their class’s instance variables. of does not have access to the K and V declared in ; instead, it declares its own K and V generics.
+
+You can bind generics to interfaces too:
+
+```TypeScript
+interface MyMap<K, V> {
+    get(key: K): V
+    set(key: K, value: V): void
+}
+```
+
+And like with functions, you can bind concrete types to generics explicitly, or let TypeScript infer the types for you:
+
+```TypeScript
+let a = new MyMap<string, number>('k', 1) // MyMap<string, number>
+let b = new MyMap('k', true) // MyMap<string, boolean>
+
+a.get('k')
+b.set('k', false)
+```
+
+## Mixins
+
+JavaScript and TypeScript don’t have trait or mixin keywords, but it’s straightforward to implement them ourselves. Both are ways to simulate multiple inheritance (classes that extend more than one other class) and do role-oriented programming, a style of programming where you don’t say things like “this thing is a Shape" but instead describe properties of a thing, like “it can be measured” or “it has four sides.” Instead of “is-a” relationships, you describe “can” and “has-a” relationships.
+
+Mixins are a pattern that allows us to mix behaviors and properties into a class. By convention, mixins:
+
+* Can have state (i.e., instance properties)
+* Can only provide concrete methods (not abstract ones)
+* Can have constructors, which are called in the same order as their classes were mixed in.
+
+## Simulating final classes
+
+Though TypeScript doesn’t support the final keyword for classes or methods, it’s easy to simulate it for classes. If you haven’t worked much with object-oriented languages before, final is the keyword some languages use to mark a class as nonextensible, or a method as nonoverridable.
+
+To simulate final classes in TypeScript, we can take advantage of private constructors:
+
+```TypeScript
+class MessageQueue {
+    private constructor(private messages: string[]) {}
+}
+```
+
+When a constructor is marked private, you can’t new the class or extend it:
+
+```TypeScript
+class BadQueue extends MessageQueue {} // Error TS2675: Cannot extend a class
+                                       // 'MessageQueue'. Class constructor is
+                                       // marked as private.
+
+new MessageQueue([]) // Error TS2673: Constructor of class
+                     // 'MessageQueue' is private and only
+                     // accessible within the class
+                     // declaration.
+```
