@@ -3515,3 +3515,27 @@ Notice the sprinkling of nonnull assertion operators (!) that tell TypeScript th
 # 9. Frontend and Backend Frameworks
 
 \-
+
+# 10. Namespaces.Modules
+
+## Prefer modules over namespaces when possible
+
+Prefer regular modules (the import and export kind) over namespaces as a way to more closely stick to JavaScript standards and make your dependencies more explicit.
+
+Explicit dependencies have lots of benefits for readability, enforcing module isolation (because namespaces are automatically merged, but modules are not), and static analysis, which matters for big frontend projects where stripping out dead code and splitting your compiled code into multiple files is crucial for performance.
+
+When running TypeScript programs in a NodeJS environment, modules are also the clear choice because of NodeJS’s built-in support for CommonJS. In browser environments, some programmers prefer namespaces for simplicity, but for medium- to large-sized projects, try to stick to modules over namespaces.
+
+## Declaration Merging
+
+So far we’ve touched on three types of merging that TypeScript does for us:
+
+* Merging values and types, so that the same name can refer to either a value or a type depending how we use it (see “Companion Object Pattern”)
+* Merging multiple namespaces into one
+* Merging multiple interfaces into one (see “Declaration Merging”)
+
+As you might have intuited, these are three special cases of a much more general TypeScript behavior. TypeScript has a rich set of behavior for merging different kinds of names, unlocking all sorts of patterns that can otherwise be difficult to express (see Table 10-1).
+
+![Table-10-1](ScreenshotsForNotes/Chapter10/Table_10_1.PNG)
+
+This means that if, for example, you declare a value and a type alias in the same scope, TypeScript will allow it, and infer which one you meant—the type or the value—from whether you use the name in a value or a type position. This is what lets us implement the pattern described in “Companion Object Pattern”. It also means that you can use an interface and a namespace to implement companion objects—you’re not limited to just a value and a type alias. Or you can take advantage of module merging to augment a third-party module declaration (more on this in “Extending a Module”). Or you can add static methods to an enum by merging that enum with a namespace (try it!)
