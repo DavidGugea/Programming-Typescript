@@ -3539,3 +3539,7 @@ As you might have intuited, these are three special cases of a much more general
 ![Table-10-1](ScreenshotsForNotes/Chapter10/Table_10_1.PNG)
 
 This means that if, for example, you declare a value and a type alias in the same scope, TypeScript will allow it, and infer which one you meant—the type or the value—from whether you use the name in a value or a type position. This is what lets us implement the pattern described in “Companion Object Pattern”. It also means that you can use an interface and a namespace to implement companion objects—you’re not limited to just a value and a type alias. Or you can take advantage of module merging to augment a third-party module declaration (more on this in “Extending a Module”). Or you can add static methods to an enum by merging that enum with a namespace (try it!)
+
+# 11. Interoperating with JavaScript
+
+\-
