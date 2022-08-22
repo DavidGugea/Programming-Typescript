@@ -3504,3 +3504,6 @@ function removeFromDOM(dialog: Dialog, element: Element) {
 
 Notice the sprinkling of nonnull assertion operators (!) that tell TypeScript that we’re sure dialog.id, the result of our document.getElementById call, and element.parentNode are defined
 
+# 7. Handling Errors
+
+\-
