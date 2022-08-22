@@ -2715,3 +2715,792 @@ new MessageQueue([]) // Error TS2673: Constructor of class
                      // accessible within the class
                      // declaration.
 ```
+
+# 6. Advanced Types
+
+## Subtypes and Supertypes
+
+> ***SUBTYPE*** > If you have two types A and B, and B is a subtype of A, then you can safely use a B anywhere an A is required (Figure 6-1).
+
+![Figure-6-1](ScreenshotsForNotes/Chapter6/Figure_6_1.PNG)
+
+For example:
+
+* Array is a subtype of Object.
+* Tuple is a subtype of Array.
+* Everything is a subtype of any.
+* never is a subtype of everything.
+* If you have a class Bird that extends Animal, then Bird is a subtype of Animal.
+
+From the definition I just gave for subtype, that means:
+
+* Anywhere you need an Object you can also use an Array.
+* Anywhere you need an Array you can also use a Tuple.
+* Anywhere you need an any you can also use an Object.
+* You can use a never anywhere.
+* Anywhere you need an Animal you can also use a Bird.
+
+> ***SUPERTYPE*** > If you have two types A and B, and B is a supertype of A, then you can safely use an A anywhere a B is required (Figure 6-2).
+
+![Figure-6-2](ScreenshotsForNotes/Chapter6/Figure_6_2.PNG)
+
+Again from the flowchart in Figure 3-1:
+
+* Array is a supertype of Tuple.
+* Object is a supertype of Array.
+* Any is a supertype of everything.
+* Never is a supertype of nothing.
+* Animal is a supertype of Bird.
+
+This is just the opposite of how subtypes work, and nothing more.
+
+## Variance
+
+For most types it’s pretty easy to intuit whether or not some type A is a subtype of another type B. For simple types like number, string, and so on, you can just look them up in the flowchart in Figure 3-1, or reason through it (”number is contained in the union number | string, so it must be a subtype of it”).
+
+But for parameterized (generic) types and other more complex types, it gets more complicated. Consider these cases:
+
+* When is ```Array<A>``` a subtype of ```Array<B>```?
+* When is a shape A a subtype of another shape B?
+* When is a function (a: A) => B a subtype of another function ```(c: C) => D?```
+
+Subtyping rules for types that contain other types (i.e., things with type parameters like ```Array<A>```, shapes with fields like {a: number}, or functions like (a: A) => B) are harder to reason about, and the answers aren’t as clear-cut. In fact, subtyping rules for these kinds of complex types are a big point of disagreement among programming languages—almost no two languages are alike!
+
+This syntax is not valid TypeScript:
+
+* A <: B means "A is a subtype of or the same as the type B.”
+* A >: B means "A is a supertype of or the same as the type B.”
+
+When talking about types, we say that TypeScript shapes (objects and classes) are covariant in their property types. That is, for an object A to be assignable to an object B, each of its properties must be <: its corresponding property in B.
+
+More generally, covariance is just one of four sorts of variance:
+
+* Invariance
+    * You want exactly a T.
+* Covariance
+    * You want a <:T.
+* Contravariance
+    * You want a >:T.
+* Bivariance
+    * You’re OK with either <:T or >:T.
+
+## Function variance
+
+Let’s start with a few examples.
+
+A function A is a subtype of function B if A has the same or lower arity (number of parameters) than B and:
+
+1. A’s this type either isn’t specified, or is >: B’s this type.
+2. Each of A’s parameters is >: its corresponding parameter in B.
+3. A’s return type is <: B’s return type.
+
+You might have noticed that for a function A to be a subtype of function B, we say that its this type and parameters must be >: their counterparts in B, while its return type has to be <:! Why does the direction flip like that? Why isn’t it simply <: for each component (this type, parameter types, and return type), like it is for objects, arrays, unions, and so on?
+
+To answer this question, let’s derive it ourselves. We’ll start by defining three types (we’re going to use a class for clarity, but this works for any choice of types where A <: B <: C):
+
+```TypeScript
+class Animal {}
+
+class Bird extends Animal {
+    chirp() {}
+}
+
+class Crow extends Bird {
+    caw() {}
+}
+```
+
+In this example, Crow is a subtype of Bird, which is a subtype of Animal. That is, Crow <: Bird <: Animal.
+
+Now, let’s define a function that takes a Bird, and makes it chirp:
+
+```TypeScript
+function chirp(bird: Bird): Bird {
+    bird.chirp()
+    return bird
+}
+```
+
+So far, so good. What kinds of things does TypeScript let you pass into chirp?
+
+```TypeScript
+chirp(new Animal()); // Error TS2345: Argument of type 'Animal' is not assignable
+chirp(new Bird()); // to parameter of type 'Bird'.
+chirp(new Crow());
+```
+
+You can pass an instance of Bird (because that’s what chirp’s parameter bird’s type is) or an instance of Crow (because it’s a subtype of Bird). Great: passing in a subtype works as expected.
+
+Let’s make a new function. This time, its parameter will be a function:
+
+```TypeScript
+function clone(f: (b: Bird) => Bird): void {
+    // ...
+}
+```
+
+clone needs a function f that takes a Bird and returns a Bird. What types of functions can you safely pass for f? Clearly you can pass a function that takes a Bird and returns a Bird:
+
+```TypeScript
+function birdToBird(b: Bird): Bird {
+    // ...
+}
+
+clone(birdToBird) // OK
+```
+
+What about a function that takes a Bird and returns a Crow, or an Animal?
+
+```TypeScript
+function birdToCrow(d: Bird): Crow {
+    // ...
+}
+clone(birdToCrow) // OK
+
+function birdToAnimal(d: Bird): Animal {
+    // ...
+}
+clone(birdToAnimal) // Error TS2345: Argument of type '(d: Bird) => Animal' is 
+                    // not assignable to parameter of type '(b: Bird) => Bird'.
+                    // Type 'Animal' is not assignable to type 'Bird'.
+```
+
+birdToCrow works as expected, but birdToAnimal gives us an error. Why? Imagine that clone’s implementation looks like this:
+
+```TypeScript
+function clone(f: (b: Bird) => Bird): void {
+    let parent = new Bird
+    let babyBird = f(parent)
+    babyBird.chirp()
+}
+```
+
+If we passed to our clone function an f that returned an Animal, then we couldn’t call .chirp on it! So TypeScript has to make sure, at compile time, that the function we passed in returns at least a Bird.
+
+We say that functions are covariant in their return types, which is a fancy way of saying that for a function to be a subtype of another function, its return type has to be <: the other function’s return type.
+
+OK, what about parameter types?
+
+```TypeScript
+function animalToBird(a: Animal): Bird {
+    // ...
+}
+
+clone(animalToBird) // OK
+function crowToBird(c: Crow): Bird {
+    // ...
+}
+
+clone(crowToBird) // Error TS2345: Argument of type '(c: Crow) => Bird' is not
+                  // assignable to parameter of type '(b: Bird) => Bird'.
+```
+
+For a function to be assignable to another function, its parameter types (including this) all have to be >: their corresponding parameter types in the other function. To see why, think about how a user might have implemented crowToBird before passing it into clone. What if they did this?
+
+```TypeScript
+function crowToBird(c: Crow): Bird {
+    c.caw()
+    return new Bird
+}
+```
+
+Now if clone called crowToBird with a new Bird, we’d get an exception because .caw is only defined on Crows, not on all Birds.
+
+This means functions are contravariant in their parameter and this types. That is, for a function to be a subtype of another function, each of its parameters and its this type must be >: its corresponding parameter in the other function.
+
+Thankfully, you don’t have to memorize and recite these rules. Just have them in the back of your mind when your code editor gives you a red squiggly when you pass an incorrectly typed function somewhere, so you know why TypeScript is giving you the error it does.
+
+## Assignability
+
+Subtype and supertype relations are core concepts in any statically typed language. They’re also important to understanding how assignability works (as a reminder, assignability refers to TypeScript’s rules for whether or not you can use a type A where another type B is required).
+
+When TypeScript wants to answer the question “Is type A assignable to type B?” it follows a few simple rules. For non-enum types—like arrays, booleans, numbers, objects, functions, classes, class instances, and strings, including literal types—A is assignable to B if either of the following is true:
+
+1. A <: B.
+2. A is any.
+
+Rule 1 is just the definition of what a subtype is: if A is a subtype of B, then wherever you need a B you can also use an A.
+
+Rule 2 is the exception to rule 1, and is a convenience for interoperating with JavaScript code.
+
+For enum types created with the enum or const enum keywords, a type A is assignable to an enum B if either of these is true:
+
+1. A is a member of enum B.
+2. B has at least one member that’s a number, and A is a number.
+
+Rule 1 is exactly the same as for simple types (if A is a member of enum B, then A’s type is B, so all we’re saying is B <: B).
+
+Rule 2 is a convenience for working with enums.
+
+## Type Widening
+
+Type widening is key to understanding how TypeScript’s type inference works. In general, TypeScript will be lenient when inferring your types, and will err on the side of inferring a more general type rather than the most specific type possible. This makes your life as a programmer easier, and means less time spent quelling the typechecker’s complaints.
+
+When you declare a variable in a way that allows it to be mutated later (e.g., with let or var), its type is widened from its literal value to the base type that literal belongs to:
+
+```TypeScript
+let a = 'x' // string
+let b = 3 // number
+var c = true // boolean
+const d = {x: 3} // {x: number}
+
+enum E {X, Y, Z}
+let e = E.X // E
+```
+
+Not so for immutable declarations:
+
+```TypeScript
+const a = 'x' // 'x'
+const b = 3 // 3
+const c = true // true
+
+enum E {X, Y, Z}
+const e = E.X // E.X
+```
+
+You can use an explicit type annotation to prevent your type from being widened:
+
+```TypeScript
+let a: 'x' = 'x' // 'x'
+let b: 3 = 3 // 3
+var c: true = true // true
+const d: {x: 3} = {x: 3} // {x: 3}
+```
+
+When you reassign a nonwidened type using let or var, TypeScript widens it for you. To tell TypeScript to keep it narrow, add an explicit type annotation to your original declaration:
+
+```TypeScript
+const a = 'x' // 'x'
+let b = a // string
+
+const c: 'x' = 'x' // 'x'
+let d = c // 'x'
+```
+
+Variables initialized to null or undefined are widened to any:
+
+```TypeScript
+let a = null // any
+a = 3 // any
+a = 'b' // any
+```
+
+But when a variable initialized to null or undefined leaves the scope it was declared in, TypeScript assigns it a definite type:
+
+```TypeScript
+function x() {
+    let a = null // any
+    a = 3 // any
+    a = 'b' // any
+    return a
+}
+
+x() // string
+```
+
+## The ```const``` type
+
+TypeScript comes with a special const type that you can use to opt out of type widening a declaration at a time. Use it as a type assertion (read ahead to “Type Assertions”):
+
+```TypeScript
+let a = {x: 3} // {x: number}
+let b: {x: 3} // {x: 3}
+let c = {x: 3} as const // {readonly x: 3}
+```
+
+const opts your type out of widening and recursively marks its members as readonly, even for deeply nested data structures:
+
+```TypeScript
+let d = [1, {x: 2}] // (number | {x: number})[]
+let e = [1, {x: 2}] as const // readonly [1, {readonly x: 2}]
+```
+
+Use as const when you want TypeScript to infer your type as narrowly as possible.
+
+## Excess property checking
+
+excess property checking works like this: when you try to assign a fresh object literal type T to another type U, and T has properties that aren’t present in U, TypeScript reports an error.
+
+A fresh object literal type is the type TypeScript infers from an object literal. If that object literal either uses a type assertion or is assigned to a variable, then the fresh object literal type is widened to a regular object type, and its freshness disappears.
+
+## Discriminated union types
+
+As we just learned, TypeScript has a deep understanding of how JavaScript works, and is able to follow along as you refine your types, just like you would when you trace through your program in your head.
+
+For example, say we’re building a custom event system for an application. We start by defining a couple of event types, along with a function to handle events that come in. Imagine that UserTextEvent models a keyboard event (e.g., the user typed something in a text ```<input/>```) and UserMouseEvent models a mouse event (e.g., the user moved their mouse to the coordinates [100, 200]):
+
+```TypeScript
+type UserTextEvent = {value: string}
+type UserMouseEvent = {value: [number, number]}
+
+type UserEvent = UserTextEvent | UserMouseEvent
+
+function handle(event: UserEvent) {
+    if (typeof event.value === 'string') {
+        event.value // string
+        // ...
+        return
+    }
+    
+    event.value // [number, number]
+}
+```
+
+Inside the if block, TypeScript knows that event.value has to be a string (because of the typeof check), which implies that after the if block event.value has to be a tuple of [number, number] (because of the return in the if block).
+
+What happens if we make this a little more complicated? Let’s add some more information to our event types, and see how TypeScript fares when we refine our types:
+
+```TypeScript
+type UserTextEvent = {value: string, target: HTMLInputElement}
+type UserMouseEvent = {value: [number, number], target: HTMLElement}
+
+type UserEvent = UserTextEvent | UserMouseEvent
+
+function handle(event: UserEvent) {
+    if (typeof event.value === 'string') {
+        event.value // string
+        event.target // HTMLInputElement | HTMLElement (!!!)
+        // ...
+        return
+    }
+
+    event.value // [number, number]
+    event.target // HTMLInputElement | HTMLElement (!!!)
+}
+```
+
+While the refinement worked for event.value, it didn’t carry over to event.target. Why? When handle takes a parameter of type UserEvent, that doesn’t mean we have to pass a UserTextEvent or UserMouseEvent— in fact, we could pass an argument of type UserMouseEvent | UserTextEvent. And since members of a union might overlap, TypeScript needs a more reliable way to know when we’re in one case of a union type versus another case.
+
+The way to do this is to use a literal type to tag each case of your union type. A good tag is:
+
+* On the same place in each case of your union type. That means the same object field if it’s a union of object types, or the same index if it’s a union of tuple types. In practice, tagged unions usually use object types.
+* Typed as a literal type (a literal string, number, boolean, etc.). You can mix and match different types of literals, but it’s good practice to stick to a single type; typically, that’s a string literal type.
+* Not generic. Tags should not take any generic type arguments.
+* Mutually exclusive (i.e., unique within the union type).
+
+With that in mind, let’s update our event types again:
+
+```TypeScript
+type UserTextEvent = {type: 'TextEvent', value: string, target: HTMLInputElement}
+
+type UserMouseEvent = {type: 'MouseEvent', value: [number, number], target: HTMLElement}
+
+type UserEvent = UserTextEvent | UserMouseEvent
+
+function handle(event: UserEvent) {
+    if (event.type === 'TextEvent') {
+        event.value // string
+        event.target // HTMLInputElement
+        // ...
+        return
+    }
+    event.value // [number, number]
+    event.target // HTMLElement
+}
+```
+
+Now when we refine event based on the value of its tagged field (event.type), TypeScript knows that in the if branch event has to be a UserTextEvent, and after the if branch it has to be a UserMouseEvent. Since the tag is unique per union type, TypeScript knows that the two are mutually exclusive.
+
+Use tagged unions when writing a function that has to handle the different cases of a union type. For example, they’re invaluable when working with Flux actions, Redux reducers, or React’s useReducer
+
+## The keying-in operator
+
+Say you have a complex nested type to model the GraphQL API response you got back from your social media API of choice:
+
+```TypeScript
+type APIResponse = {
+    user: {
+        userId: string
+        friendList: {
+            count: number
+            friends: {
+                firstName: string
+                lastName: string
+            }[]
+        }
+    }
+}
+```
+
+You might fetch that response from the API, then render it:
+
+```TypeScript
+function getAPIResponse(): Promise<APIResponse> {
+    // ...
+}
+
+function renderFriendList(friendList: unknown) {
+    // ...
+}
+
+let response = await getAPIResponse()
+renderFriendList(response.user.friendList)
+```
+
+What should the type of friendList be? (It’s stubbed out as unknown for now.) You could type it out and reimplement your top-level APIResponse type in terms of it:
+
+```TypeScript
+type FriendList = {
+    count: number
+    friends: {
+        firstName: string
+        lastName: string
+    }[]
+}
+
+type APIResponse = {
+    user: {
+        userId: string
+        friendList: FriendList
+    }
+}
+
+function renderFriendList(friendList: FriendList) {
+    // ...
+}
+```
+
+But then you’d have to come up with names for each of your top-level types, which you don’t always want (e.g., if you used a build tool to generate TypeScript types from your GraphQL schema). Instead, you can key in to your type:
+
+```TypeScript
+type APIResponse = {
+    user: {
+        userId: string
+        friendList: {
+            count: number
+            friends: {
+                firstName: string
+                lastName: string
+            }[]
+        }
+    }
+}
+
+type FriendList = APIResponse['user']['friendList']
+
+function renderFriendList(friendList: FriendList) {
+    // ...
+}
+```
+
+You can key in to any shape (object, class constructor, or class instance), and any array. For example, to get the type of an individual friend:
+
+```TypeScript
+type Friend = FriendList['friends'][number]
+```
+
+number is a way to key in to an array type; for tuples, use 0, 1, or another number literal type to represent the index you want to key in to.
+
+## The keyof operator
+
+Use keyof to get all of an object’s keys as a union of string literal types. Using the previous APIResponse example:
+
+```TypeScript
+type ResponseKeys = keyof APIResponse // 'user'
+type UserKeys = keyof APIResponse['user'] // 'userId' | 'friendList'
+type FriendListKeys = keyof APIResponse['user']['friendList'] // 'count' | 'friends'
+```
+
+## The Record Type
+
+TypeScript’s built-in Record type is a way to describe an object as a map from something to something.
+
+Recall from the Weekday example in “Totality” that there are two ways to enforce that an object defines a specific set of keys. Record types are the first.
+
+Let’s use Record to build a map from each day of the week to the next day of the week. With Record, you can put some constraints on the keys and values in nextDay:
+
+```TypeScript
+type Weekday = 'Mon' | 'Tue'| 'Wed' | 'Thu' | 'Fri'
+type Day = Weekday | 'Sat' | 'Sun'
+
+let nextDay: Record<Weekday, Day> = {
+    Mon: 'Tue'
+}
+```
+
+Now, you get a nice, helpful error message right away:
+
+```
+Error TS2739: Type '{Mon: "Tue"}' is missing the following properties
+from type 'Record<Weekday, Day>': Tue, Wed, Thu, Fri.
+```
+
+Adding the missing Weekdays to your object, of course, makes the error go away.
+
+Record gives you one extra degree of freedom compared to regular object index signatures: with a regular index signature you can constrain the types of an object’s values, but the key can only be a regular string, number, or symbol; with Record, you can also constrain the types of an object’s keys to subtypes of string and number.
+
+## Mapped Types
+
+TypeScript gives us a second, more powerful way to declare a safer nextDay type: mapped types. Let’s use mapped types to say that nextDay is an object with a key for each Weekday, whose value is a Day:
+
+```TypeScript
+let nextDay: {[K in Weekday]: Day} = {
+    Mon: 'Tue'
+}
+```
+
+This is another way to get a helpful hint for how to fix what you missed:
+
+```
+Error TS2739: Type '{Mon: "Tue"}' is missing the following properties
+from type '{Mon: Weekday; Tue: Weekday; Wed: Weekday; Thu: Weekday;
+Fri: Weekday}': Tue, Wed, Thu, Fri.
+```
+
+Mapped types are a language feature unique to TypeScript. Like literal types, they’re a utility feature that just makes sense for the challenge that is statically typing JavaScript.
+
+As you saw, mapped types have their own special syntax. And like index signatures, you can have at most one mapped type per object:
+
+```TypeScript
+type MyMappedType = {
+    [Key in UnionType]: ValueType
+}
+```
+
+As the name implies, it’s a way to map over an object’s key and value types. In fact, TypeScript uses mapped types to implement its built-in Record type we used earlier:
+
+```TypeScript
+type Record<K extends keyof any, T> = {
+    [P in K]: T
+}
+```
+
+Mapped types give you more power than a mere Record because in addition to letting you give types to an object’s keys and values, when you combine them with keyed-in types, they let you put constraints on which value type corresponds to which key name.
+
+Let’s quickly run through some of the things you can do with mapped types.
+
+```TypeScript
+type Account = {
+    id: number
+    isEmployee: boolean
+    notes: string[]
+}
+
+// Make all fields optional
+type OptionalAccount = {
+    [K in keyof Account]?: Account[K] // 1
+}
+
+// Make all fields nullable
+type NullableAccount = {
+    [K in keyof Account]: Account[K] | null // 2
+}
+
+// Make all fields read-only
+type ReadonlyAccount = {
+    readonly [K in keyof Account]: Account[K] // 3
+}
+
+// Make all fields writable again (equivalent to Account)
+type Account2 = {
+    -readonly [K in keyof ReadonlyAccount]: Account[K] // 4
+}
+
+// Make all fields required again (equivalent to Account)
+type Account3 = {
+    [K in keyof OptionalAccount]-?: Account[K] // 5
+}
+```
+
+1. We create a new object type OptionalAccount by mapping over Account, marking each field as optional along the way.
+2. We create a new object type NullableAccount by mapping over Account, adding null as a possible value for each field along the way.
+3. We create a new object type ReadonlyAccount by taking Account and making each of its fields read-only (that is, readable but not writable).
+4. We can mark fields as optional (?) or readonly, and we can also unmark them. With the minus (–) operator—a special type operator only available with mapped types—we can undo ? and readonly, making fields required and writable again, respectively. Here we create a new object type Account2, equivalent to our Account type, by mapping over ReadonlyAccount and removing the readonly modifier with the minus (–) operator.
+5. We create a new object type Account3, equivalent to our original Account type, by mapping over OptionalAccount and removing the optional (?) operator with the minus (–) operator.
+
+Minus (–) has a corresponding plus (+) type operator. You will probably never use this operator directly, because it’s implied: within a mapped type, readonly is equivalent to +readonly, and ? is equivalent to +?. + is just there for completeness.
+
+## Built-in mapped types
+
+The mapped types we derived in the last section are so useful that TypeScript ships with many of them built in:
+
+* ```Record<Keys, Values>```
+    * An object with keys of type Keys and values of type Values
+* ```Partial<Object>```
+    * Marks every field in Object as optional
+* ```Required<Object>```
+    * Marks every field in Object as nonoptional
+* ```Readonly<Object>```
+    * Marks every field in Object as read-only
+* ```Pick<Object, Keys>```
+    * Returns a subtype of Object, with just the given Keys
+
+## User-Defined Type Guards
+
+For some kinds of boolean-returning functions, simply saying that your function returns a boolean may not be enough. For example, let’s write a function that tells you if you passed it a string or not:
+
+```TypeScript
+function isString(a: unknown): boolean {
+    return typeof a === 'string'
+}
+
+isString('a') // evaluates to true
+isString([7]) // evaluates to false
+```
+
+So far so good. What happens if you try to use isString in some realworld code?
+
+```TypeScript
+function parseInput(input: string | number) {
+    let formattedInput: string
+    if (isString(input)) {
+        formattedInput = input.toUpperCase() // Error TS2339: Property 'toUpperCase'
+    } // does not exist on type 'number'.
+}
+```
+
+What gives? If typeof works for regular type refinement (see “Refinement”), why doesn’t it work here?
+
+The thing about type refinement is it’s only powerful enough to refine the type of a variable in the scope you’re in. As soon as you leave that scope, the refinement doesn’t carry over to whatever new scope you’re in. In our isString implementation, we refined the input parameter’s type to string using typeof, but because type refinement doesn’t carry over to new scopes, it got lost—all TypeScript knows is that isString returned a boolean.
+
+What we can do is tell the typechecker that not only does isString return a boolean, but whenever that boolean is true, the argument we passed to isString is a string. To do that, we use something called a user-defined type guard:
+
+```TypeScript
+function isString(a: unknown): a is string {
+    return typeof a === 'string'
+}
+```
+
+Type guards are a built-in TypeScript feature, and are what lets you refine types with typeof and instanceof. But sometimes, you need the ability to declare type guards yourself—that’s what the is operator is for. When you have a function that refines its parameters’ types and returns a boolean, you can use a user-defined type guard to make sure that refinement is flowed whenever you use that function.
+
+You won’t use user-defined type guards often, but when you do, they’re awesome for writing clean, reusable code.
+
+## Conditional Types
+
+Conditional types might be the single most unique feature in all of TypeScript. At a high level, conditional types let you say, “Declare a type T that depends on types U and V; if U <: V, then assign T to A, and otherwise, assign T to B.”
+
+In code it might look like this:
+
+```TypeScript
+type IsString<T> = T extends string // 1
+    ? true // 2
+    : false // 3
+
+type A = IsString<string> // true
+type B = IsString<number> // false
+```
+
+Let’s break that down line by line.
+
+1. We declare a new conditional type IsString that takes a generic type T. The “condition” part of this conditional type is T extends string; that is, “Is T a subtype of string?”
+2. If T is a subtype of string, we resolve to the type true.
+3. Otherwise, we resolve to the type false.
+
+Note how the syntax looks just like a regular value-level ternary expression, but at the type level. And like regular ternary expressions, you can nest them too.
+
+Conditional types aren’t limited to type aliases. You can use them almost anywhere you can use a type: in type aliases, interfaces, classes, parameter types, and generic defaults in functions and methods.
+
+## The infer keyword
+
+The final feature of conditional types is the ability to declare generic types as part of a condition. As a refresher, so far we’ve seen just one way to declare generic type parameters: using angle brackets (```<T>```). Conditional types have their own syntax for declaring generic types inline: the infer keyword.
+
+Let’s declare a conditional type ElementType, which gets the type of an array’s elements:
+
+```TypeScript
+type ElementType<T> = T extends unknown[] ? T[number] : T
+type A = ElementType<number[]> // number
+```
+
+Now, let’s rewrite it using infer:
+
+```TypeScript
+type ElementType2<T> = T extends (infer U)[] ? U : T
+type B = ElementType2<number[]> // number
+```
+
+In this simple example ElementType is equivalent to ElementType2. Notice how the infer clause declares a new type variable, U—TypeScript will infer the type of U from context, based on what T you passed to ElementType2.
+
+Also notice why we declared U inline instead of declaring it up front, alongside T. What would have happened if we did declare it up front?
+
+```TypeScript
+type ElementUgly<T, U> = T extends U[] ? U : T
+type C = ElementUgly<number[]> // Error TS2314: Generic type 'ElementUgly'
+                               // requires 2 type argument(s).
+```
+
+Uh-oh. Because ElementUgly defines two generic types, T and U, we have to pass both of them in when instantiating ElementUgly. But if we do that, that defeats the point of having an ElementUgly type in the first place; it puts the burden of computing U on the caller, when we wanted ElementUgly to compute the type itself.
+
+## Built-in Conditional Types
+
+Conditional types let you express some really powerful operations at the type level. That’s why TypeScript ships with a few globally available conditional types out of the box:
+
+* ```Exclude<T, U>```
+    * Like our Without type from before, computes those types in T that are not in U:
+
+```TypeScript
+type A = number | string
+type B = string
+type C = Exclude<A, B> // number
+```
+
+* ```Extract<T, U>```
+    * Computes the types in T that you can assign to U:
+
+```TypeScript
+type A = number | string
+type B = string
+type C = Extract<A, B> // string
+```
+
+* ```NonNullable<T>```
+    * Computes a version of T that excludes null and undefined:
+
+```TypeScript
+type A = {a?: number | null}
+type B = NonNullable<A['a']> // number
+```
+
+* ```ReturnType<F>```
+    * Computes a function’s return type (note that this doesn’t work as you’d expect for generic and overloaded functions):
+
+```TypeScript
+type F = (a: number) => string
+type R = ReturnType<F> // string
+```
+
+* ```InstanceType<C>```
+    * Computes the instance type of a class constructor:
+
+```TypeScript
+type A = {new(): B}
+type B = {b: number}
+type I = InstanceType<A> // {b: number}
+```
+
+## Escape Hatches
+
+> ***In case it’s not obvious, you should use the following TypeScript features as little as possible. If you find yourself relying on them, you might be doing something wrong.***
+
+### Type Assertions
+
+TypeScript gives us two syntaxes for type assertions:
+
+```TypeScript
+function formatInput(input: string) {
+    // ...
+}
+function getUserInput(): string | number {
+    // ...
+}
+
+let input = getUserInput()
+
+// Assert that input is a string
+formatInput(input as string)
+
+// This is equivalent to
+formatInput(<string>input)
+```
+
+### Nonnull assertions
+
+```TypeScript
+function removeFromDOM(dialog: Dialog, element: Element) {
+    element.parentNode!.removeChild(element) // parentNode!
+    delete dialog.id
+}
+```
+
+Notice the sprinkling of nonnull assertion operators (!) that tell TypeScript that we’re sure dialog.id, the result of our document.getElementById call, and element.parentNode are defined
+
