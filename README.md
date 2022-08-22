@@ -3507,3 +3507,7 @@ Notice the sprinkling of nonnull assertion operators (!) that tell TypeScript th
 # 7. Handling Errors
 
 \-
+
+# 8. Asynchronous Programming, Concurrency, and Parallelism
+
+\-
