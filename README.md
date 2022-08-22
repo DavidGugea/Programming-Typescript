@@ -3814,3 +3814,7 @@ While a full discussion of optimizing your JavaScript bundle for fast loading is
 * Have a strategy for measuring page load time, either synthetically or, ideally, with real user data. As your app grows the initial load time can get slower and slower; you can only optimize that load time if you have a way to measure it. Tools like New Relic and Datadog are invaluable here.
 * Keep your production build as similar as possible to your development build. The more the two diverge, the more hard-to-fix bugs you’ll have that only show up in production.
 * Finally, when shipping TypeScript to run in the browser, have a strategy for polyfilling missing browser features. This might be a standard set of polyfills you ship as part of every bundle, or it might be a dynamic set of polyfills based on what features the user’s browser supports
+
+# 13. Conclusion
+
+\-
